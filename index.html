@@ -9,6 +9,7 @@
 	$(document).ready(function() {
    		$.get(HTML_FILE_URL, function(data) {
         	var fileDom = $(data);
+        	$('.test').html(data);
             alert(fileDom);
     	});
 	});
@@ -25,7 +26,8 @@
 			<li><a href="#">LinkHere</a></li> 
   		</ul> 
   	</div>
-
+  	<div id=".test">
+  	</div>
 	<h2> Intro </h2>
 	<p> The Blog will contain everything from personal rants to technical tutorials.
 	</p>
