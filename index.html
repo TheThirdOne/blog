@@ -8,10 +8,10 @@
   	var HTML_FILE_URL = 'text.json';
 
 	$(document).ready(function() {
-		//alert("hello");
-   		//var msg = $.ajax({type: "GET", url: "posts/1.txt", async: false}).responseText;
-   		var msg = get("posts/1.txt");//"hello";
-   		$("div.posts").html($("div.posts").text()+msg+"\n<br>\n");
+   		var msg = "yolo";//get("posts/1.txt");//"hello";
+   		for(var i = 3; i > 0;i++){
+   			addToWithReturn("div.posts",get("post/"+i+".txt"));
+   		}
    	});
 
 	</script>
