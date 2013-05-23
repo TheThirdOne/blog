@@ -5,11 +5,9 @@
 	<script src="jquery.js"></script>
 	<script src="blog.js"></script>
   	<script>
-  	var HTML_FILE_URL = 'text.json';
-
 	$(document).ready(function() {
    		var msg = "yolo";//get("posts/1.txt");//"hello";
-   		for(var i = 3; i > 0;i++){
+   		for(var i = 3; i > 0;i--){
    			addToWithReturn("div.posts",get("post/"+i+".txt"));
    		}
    	});
