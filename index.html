@@ -9,9 +9,15 @@
 	$(document).ready(function() {
    		$.get(HTML_FILE_URL, function(data) {
         	var fileDom = $(data);
-        	$('body').append(data);
-            alert(data);
+        	//$('body').append(data);
+            alert("tester: " + data);
     	}, "json");
+    $(document).ready(function() {
+   		$.get(HTML_FILE_URL, function(data) {
+        	var fileDom = $(data);
+        	$('body').append(data.test);
+            alert("test: " + data.test);
+    	}, "string");
 	});
 	</script>
 </head>
