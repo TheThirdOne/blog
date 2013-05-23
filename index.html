@@ -4,14 +4,14 @@
 	<link rel="stylesheet" type="text/css" href="/style.css">
 	<script src="jquery.js"></script>
   	<script>
-  	var HTML_FILE_URL = 'test.html';
+  	var HTML_FILE_URL = 'text.json';
 
 	$(document).ready(function() {
    		$.get(HTML_FILE_URL, function(data) {
         	var fileDom = $(data);
-        	$('.test').html(data);
-            alert(fileDom);
-    	});
+        	$('body').append(data);
+            alert(data);
+    	}, "string");
 	});
 	</script>
 </head>
