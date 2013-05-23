@@ -3,15 +3,15 @@
 	<title>TheThirdOne's Blog</title>
 	<link rel="stylesheet" type="text/css" href="/style.css">
 	<script src="jquery.js"></script>
+	<script src="blog.js"></script>
   	<script>
   	var HTML_FILE_URL = 'text.json';
 
 	$(document).ready(function() {
-		alert("hello");
-   		var msg = $.ajax({type: "GET", url: "text.txt", async: false}).responseText;
-   		alert(msg);
-   		msg = $.ajax({type: "GET", url: "test.html", async: false}).responseText;
-   		$('body').append(msg);
+		//alert("hello");
+   		//var msg = $.ajax({type: "GET", url: "posts/1.txt", async: false}).responseText;
+   		var msg = get("posts/1.txt");//"hello";
+   		$("div.posts").html($("div.posts").text()+msg+"\n<br>\n");
    	});
 
 	</script>
@@ -27,9 +27,9 @@
 			<li><a href="#">LinkHere</a></li> 
   		</ul> 
   	</div>
-  	<div id=".test">
-  	</div>
 	<h2> Intro </h2>
 	<p> The Blog will contain everything from personal rants to technical tutorials.
 	</p>
+	<div class="posts">
+  	</div>
 </body>
