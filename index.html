@@ -7,19 +7,20 @@
   	var HTML_FILE_URL = 'text.json';
 
 	$(document).ready(function() {
+		alert("hello");
    		$.get(HTML_FILE_URL, function(data) {
         	var fileDom = $(data);
         	//$('body').append(data);
             alert("tester: " + data);
             alert("1");
-    	}, "string")});
-    $(document).ready(function() {
+    	}, "string");
    		$.get(HTML_FILE_URL, function(data) {
         	var fileDom = $(data);
         	$('body').append(data.test);
             alert("test: " + data.test);
             alert("2");
-    	}, "json")});
+    	}, "json");
+   	});
 
 	</script>
 </head>
