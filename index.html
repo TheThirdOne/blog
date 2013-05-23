@@ -8,18 +8,10 @@
 
 	$(document).ready(function() {
 		alert("hello");
-   		$.get(HTML_FILE_URL, function(data) {
-        	var fileDom = $(data);
-        	//$('body').append(data);
-            alert("tester: " + data);
-            alert("1");
-    	}, "string");
-   		$.get(HTML_FILE_URL, function(data) {
-        	var fileDom = $(data);
-        	$('body').append(data.test);
-            alert("test: " + data.test);
-            alert("2");
-    	}, "json");
+   		var msg = $.ajax({type: "GET", url: "text.txt", async: false}).responseText;
+   		alert(msg);
+   		msg = $.ajax({type: "GET", url: "test.html", async: false}).responseText;
+   		$('body').append(msg);
    	});
 
 	</script>
