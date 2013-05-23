@@ -2,6 +2,17 @@
 <head>
 	<title>TheThirdOne's Blog</title>
 	<link rel="stylesheet" type="text/css" href="/style.css">
+	<script src="jquery.js"></script>
+  	<script>
+  	var HTML_FILE_URL = 'test.html';
+
+	$(document).ready(function() {
+   		$.get(HTML_FILE_URL, function(data) {
+        	var fileDom = $(data);
+            alert(fileDom);
+    	});
+	});
+	</script>
 </head>
 <body>
 	<h1>Blog</h1>
@@ -14,6 +25,7 @@
 			<li><a href="#">LinkHere</a></li> 
   		</ul> 
   	</div>
+
 	<h2> Intro </h2>
 	<p> The Blog will contain everything from personal rants to technical tutorials.
 	</p>
