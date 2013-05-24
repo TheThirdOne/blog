@@ -6,7 +6,6 @@
 	<script src="/javascript/library.js"></script>
   	<script>
 	$(document).ready(function() {
-   		var msg = "yolo";//get("posts/1.txt");//"hello";
    		var top = parseInt(get("posts/mostrecent.txt"));
    		for(var i = top; i > top - 10 && i > 0;i--){
    			addToWithReturn("div.posts",get("posts/"+i+".txt"));
