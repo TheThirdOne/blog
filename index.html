@@ -3,28 +3,21 @@
 	<title>TheThirdOne's Blog</title>
 	<link rel="stylesheet" type="text/css" href="/style.css">
 	<script src="/javascript/jquery.js"></script>
-	<script src="/javascript/blog.js"></script>
+	<script src="/javascript/library.js"></script>
   	<script>
 	$(document).ready(function() {
    		var msg = "yolo";//get("posts/1.txt");//"hello";
    		for(var i = 3; i > 0;i--){
    			addToWithReturn("div.posts",get("posts/"+i+".txt"));
    		}
+   		include("navbar");
    	});
 
 	</script>
 </head>
 <body>
 	<h1>Blog</h1>
-	<div id="navbar">
-  		<ul> 
-			<li><a href="/index.html">Home</a></li> 
-			<li><a href="/projects.html">Projects</a></li> 
-			<li><a href="/blog/index.html">Blog</a></li> 
-			<li><a href="#">LinkHere</a></li> 
-			<li><a href="https://github.com/TheThirdOne">My Github Account</a></li> 
-  		</ul> 
-  	</div>
+	<div id="navbar" class="navbar"></div>
 	<h2> Intro </h2>
 	<p> The Blog will contain everything from personal rants to technical tutorials.
 	</p>
