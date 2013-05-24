@@ -1,7 +1,6 @@
 <div>
 	<h2>First Post</h2>
-	<br>
-	Date: 5/23/2013
 	<hr>
 	<p>&#09 This is the first post I have made.</p>
+	<div style="text-align: right;>Posted on 5/23/2013</div>
 </div>
