@@ -6,11 +6,11 @@
 	<script src="/javascript/library.js"></script>
   	<script>
 	$(document).ready(function() {
+		include("navbar");
    		var top = parseInt(fetch("posts/mostrecent.txt"));
    		for(var i = top; i > top - 10 && i > 0;i--){
    			addToWithReturn("div.posts",fetch("posts/"+i+".txt"));
    		}
-   		include("navbar");
    	});
 
 	</script>
