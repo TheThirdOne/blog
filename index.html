@@ -9,7 +9,7 @@
 		include("navbar");
    		var top = parseInt(fetch("posts/mostrecent.txt"));
    		for(var i = top; i > top - 10 && i > 0;i--){
-   			get("posts/"+i+".txt", function(data)
+   			get("posts/"+i+".html", function(data)
    			{
    				addToWithReturn("div.posts",data);
    			});
