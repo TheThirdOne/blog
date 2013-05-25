@@ -9,7 +9,11 @@
 		include("navbar");
    		var top = parseInt(fetch("posts/mostrecent.txt"));
    		for(var i = top; i > top - 10 && i > 0;i--){
-   			addToWithReturn("div.posts",fetch("posts/"+i+".txt"));
+   			get("posts/"+i+".txt", function(data)
+   			{
+   				addToWithReturn("div.posts",data);
+   			});
+   			//addToWithReturn("div.posts",fetch("posts/"+i+".txt"));
    		}
    	});
 
