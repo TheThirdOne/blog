@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang='en'>
+
+<head>
+  <meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<meta name='description' content='Analysis of algorithms is generally restricted to complexity analysis. Which ignores all factors of an algorithm which don&rsquo;t affect the asymptotic behaviour. Many of those factors can be important for understanding the behaviour in general. This post will demonstrate a possibility for better analyzing the finer details of algorithms.
+In reverse engineering, the implementation details may be critical to understanding or reproducing how some algorithm works. Timing analysis and fuzz testing are effective at reconstruction an algorithm if only a black box was available, but fail to provide any new insight into a known algorithm.'>
+
+<meta property='og:title' content='Analysis of Sorting Algorithms using Random Comparators • A blog`'>
+<meta property='og:description' content='Analysis of algorithms is generally restricted to complexity analysis. Which ignores all factors of an algorithm which don&rsquo;t affect the asymptotic behaviour. Many of those factors can be important for understanding the behaviour in general. This post will demonstrate a possibility for better analyzing the finer details of algorithms.
+In reverse engineering, the implementation details may be critical to understanding or reproducing how some algorithm works. Timing analysis and fuzz testing are effective at reconstruction an algorithm if only a black box was available, but fail to provide any new insight into a known algorithm.'>
+<meta property='og:url' content='http://localhost:1313/posts/random-sorting/'>
+<meta property='og:site_name' content='A blog`'>
+<meta property='og:type' content='article'><meta property='article:section' content='Posts'><meta property='article:published_time' content='2017-10-25T11:45:23-07:00'/><meta property='article:modified_time' content='2017-10-25T11:45:23-07:00'/><meta name='twitter:card' content='summary'>
+
+<meta name="generator" content="Hugo 0.30.2" />
+
+  <title>Analysis of Sorting Algorithms using Random Comparators • A blog`</title>
+  <link rel='canonical' href='http://localhost:1313/posts/random-sorting/'>
+  
+  
+  <link rel='icon' href='../../favicon.ico'>
+<link rel='stylesheet' href='https://fonts.googleapis.com/css?family=Ubuntu:400,400i,700&subset=latin'>
+<link rel='stylesheet' href='../../assets/css/main.77da63e1.css'>
+</head>
+
+
+<body class='page type-posts'>
+  <div class='site'>
+
+    <a class='screen-reader' href='#main'>Skip to Content</a>
+
+    <header id='header' class='header-container'>
+      <div class='header site-header'>
+        <nav id='main-menu' class='main-menu-container' aria-label='Main Menu'>
+  <ul class='main-menu'>
+  
+  </ul>
+</nav>
+
+        <div class='header-info'>
+          
+          <p class='site-title title'>A blog`</p>
+          
+          <p class='site-description subtitle'></p>
+        </div>
+      </div>
+    </header>
+
+
+<main id='main' class='main'>
+  <article lang='en' class='entry'>
+    <header class='header-container'>
+  <div class='header entry-header'>
+    <div class='header-info'>
+      <h1 class='title'>Analysis of Sorting Algorithms using Random Comparators</h1>
+      
+
+    </div>
+    
+<div class='meta'>
+  <span class='posted-on'><svg class='icon' viewbox='0 0 24 24' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' aria-hidden='true'>
+  
+  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+  <line x1="16" y1="2" x2="16" y2="6"/>
+  <line x1="8" y1="2" x2="8" y2="6"/>
+  <line x1="3" y1="10" x2="21" y2="10"/>
+  
+</svg>
+<span class='screen-reader'>Posted on </span>
+  <time class='date' datetime='2017-10-25T11:45:23-07:00'>2017, Oct 25</time>
+</span>
+
+  
+  
+
+</div>
+
+
+  </div>
+</header>
+
+    
+    
+
+    <div class='entry-content'>
+  
+
+<p>Analysis of algorithms is generally restricted to complexity analysis. Which ignores
+all factors of an algorithm which don&rsquo;t affect the asymptotic behaviour. Many of
+those factors can be important for understanding the behaviour in general. This
+post will demonstrate a possibility for better analyzing the finer details of algorithms.</p>
+
+<p>In reverse engineering, the implementation details may be critical to understanding
+or reproducing how some algorithm works. Timing analysis and fuzz testing are effective
+at reconstruction an algorithm if only a black box was available, but fail to provide
+any new insight into a known algorithm.</p>
+
+<p>The technique proposed in this post will have parallels to both traditional analysis
+and reverse engineering. It will be possible to analyze a black box, but having
+access to known algorithms that are related is also essential. Like with fuzz testing,
+we will be pulling more information out of an algorithm by giving it unexpected inputs.</p>
+
+<p>Assuming that our input to a sorting algorithm is well formed, all sorting correct
+algorithms must result in the same output. So in order to analyze sorting algorithms
+as a black box, we must abuse the input somehow. Generally, sorting algorithms require <a href="https://en.wikipedia.org/wiki/Total_order">total order</a>
+for all elements of the array. The notation of <code>&gt;</code> and <code>&lt;</code> is not necessarily built-in
+for the elements in the array, though. So many implementations will expect a comparator
+(a function the takes two elements and returns the relation between them).</p>
+
+<p>The algorithms we will be analyzing will expect a comparator like:</p>
+
+<pre><code>           -1 if x &lt; y
+  C(x,y) =  0 if x = y
+            1 if x &gt; y
+</code></pre>
+
+<p>And we will be breaking all of the conditions of total order:</p>
+
+<ul>
+<li>Totality: a &lt;= b or b &lt;= a</li>
+<li>Antisymmetry: if a &gt;= b and b &lt;= a, a = b</li>
+<li>Transitivity: if a &gt;= b and b &gt;= c, a &gt;= c</li>
+</ul>
+
+<p>By defining a random comparator.</p>
+
+<pre><code>  c(x,y) = uniformly randomly select from [-1,0,1]
+</code></pre>
+
+<h2 id="inspiration">Inspiration</h2>
+
+<p>In <a href="https://news.ycombinator.com/item?id=12568194">a tangential conversation</a> on
+Hacker News, <a href="https://news.ycombinator.com/user?id=RKoutnik">RKoutnik</a> figured out
+the problem with using code like <code>arr.sort(()=&gt;Math.floor(Math.random()*3)-1)</code> to
+shuffle an array.</p>
+
+<p>The problem with this is that it does not actually shuffle the array, it randomly
+sorts it <sup class="footnote-ref" id="fnref:1"><a rel="footnote" href="#fn:1">1</a></sup>. The first element may often stay where it is. As most sorting algorithms
+try to avoid unneccessary swaps, seems reasonable.</p>
+
+<p>Also, a <a href="https://bost.ocks.org/mike/algorithms/">blog post</a> from Mike Bostock inspired the graphs. I am going with &ldquo;inspired&rdquo; despite that they are nealy identical copies of his style of graph, because at the time of writing I couldn&rsquo;t remember where I saw that type of graph from so I simply did what looked good.</p>
+
+<h2 id="warning-expectations">Warning / Expectations</h2>
+
+<p>The standard method of algorithmic analysis using Big O notation might be useful
+to know before reading, but is not strictly necessary as this will not contain any
+references to Big O after this. However, some familiarity with the various sorting
+algorithms is almost a necessity; there will be enough different algorithms covered
+that trying to understand all of them in one sitting might be challenging. However,
+the implementation of every algotihm is shown and links to wikipedia are provided
+so it should be possible to learn enough to follow if you are determined. If you
+have taken any introductory CS classes that had a section on sorting algorithms
+you should be fine.</p>
+
+<p>Code for all of the sorts will be included because knowing how the exact implementation
+details is essential to understanding the graphs we will be using. If you would
+prefer to skip the code sections, you should be mostly fine if you don&rsquo;t want a
+deep understanding.</p>
+
+<p>This is a fairly lengthy read; it should take around an hour to read thoroughly
+if you know most of the pure sorting algorithms.</p>
+
+<h2 id="github">Github</h2>
+
+<p>All of the code used to make the visualizations, the generated images, and the
+article itself are on <a href="https://github.com/TheThirdOne/random-sorting/">Github</a>.</p>
+
+<p>If you find an issue (like a typo or broken link), please <a href="https://github.com/TheThirdOne/random-sorting/issues">file an issue</a>
+or submit a <a href="https://github.com/TheThirdOne/random-sorting/pulls">pull request</a>.</p>
+
+<h2 id="histogram">Histogram</h2>
+
+<p>Because we will be using randomness, a single input array could become  one of many
+output arrays. So we will need a method to describe the probability distribution
+of the output.</p>
+
+<p>So we will be using a 2D histogram (think 2D array of probabilities)<sup class="footnote-ref" id="fnref:2"><a rel="footnote" href="#fn:2">2</a></sup> where each
+element <code>histogram[x][y]</code> is the probability of the element at <code>arr[x]</code> ending up
+at <code>arr[y]</code> after the algorithm finishes.</p>
+
+<p>And that will be displayed as an image with each pixel (or group of pixels)
+representing an element <code>h[x][y]</code> and using hue to represent its value. Purple will
+be the highest probabilities and red will be the lowest probabilities. One important
+thing to note is that the colors are only relevant to a single graph. The same color
+on two different graphs can represent very different probabilities. This is ok for
+this application because we will only be doing qualitative analysis on a single
+graph at a time.</p>
+
+<p>The full scale looks like:</p>
+
+<p><img src="images/scale.png" alt="Scale" /></p>
+
+<p>For example, a histogram of an algorithm that does nothing looks like:</p>
+
+<p><img src="images/forward.png" alt="Forward" /></p>
+
+<p>Each element has a 100% chance of staying where it is.</p>
+
+<p>And for an algorithm that reverses the array would look like:</p>
+
+<p><img src="images/backward.png" alt="Backward" /></p>
+
+<p>Each element has a 100% chance of moving to <code>arr[n-1-x]</code>.</p>
+
+<p>These histograms can be constructed by running the algorithm <code>N</code> times and counting
+how many times each element ends up in each location.</p>
+
+<pre><code>function hist(n,sort){
+  // Make an empty nxn array and empty array
+  var h = (new Array(n).fill(0)).map(()=&gt;(new Array(n)).fill(0));
+  var arr = (new Array(n)).fill(0);
+  
+  var randomComparator = ()=&gt;Math.floor(Math.random()*3-1);
+  
+  // Run the sort 100000 times
+  for(var i = 0; i &lt; 100000; i++){
+    arr = arr.map((_,i)=&gt;i); // convert each element into its index
+    sort(arr,randomComparator);
+    for(var k = 0; k &lt; n;k++){
+      // Use the initial index (the value of the cell) and the final index (k) to update the histogram
+      h[arr[k]][k]++;
+    }
+  }
+  return h;
+}
+</code></pre>
+
+<p>This can also generate a histogram of a blackbox such as Chrome&rsquo;s implementation of Array.sort.</p>
+
+<pre><code>hist(300,(arr,comp)=&gt;arr.sort(comp));
+</code></pre>
+
+<p><img src="images/Array.sort-300.png" alt="Array.sort-300" /></p>
+
+<p>You are not expected to understand the pattern in that yet, but by the end of the post you should be able to.</p>
+
+<h2 id="simple-sorts">Simple Sorts</h2>
+
+<p>Here the simple sorts: Bubble sort, Insertion Sort and Selection sort will provide
+the introduction to matching known sorts to their histograms. These sorts are quite
+simple and have relatively easy to understand graphs.</p>
+
+<p>Note: Varying array lengths <code>n</code> are used shown because some of the features of the
+graph may be clearer at a lower resolution.</p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Bubble</td>
+<td><img src="images/bubble-10.png" alt="bubble-10" /></td>
+<td><img src="images/bubble-30.png" alt="bubble-30" /></td>
+<td><img src="images/bubble-50.png" alt="bubble-50" /></td>
+<td><img src="images/bubble-100.png" alt="bubble-100" /></td>
+<td><img src="images/bubble-300.png" alt="bubble-300" /></td>
+</tr>
+
+<tr>
+<td>Insertion</td>
+<td><img src="images/insertion-10.png" alt="insertion-10" /></td>
+<td><img src="images/insertion-30.png" alt="insertion-30" /></td>
+<td><img src="images/insertion-50.png" alt="insertion-50" /></td>
+<td><img src="images/insertion-100.png" alt="insertion-100" /></td>
+<td><img src="images/insertion-300.png" alt="insertion-300" /></td>
+</tr>
+
+<tr>
+<td>Selection</td>
+<td><img src="images/selection-10.png" alt="selection-10" /></td>
+<td><img src="images/selection-30.png" alt="selection-30" /></td>
+<td><img src="images/selection-50.png" alt="selection-50" /></td>
+<td><img src="images/selection-100.png" alt="selection-100" /></td>
+<td><img src="images/selection-300.png" alt="selection-300" /></td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="bubble-sort-https-en-wikipedia-org-wiki-bubble-sort"><a href="https://en.wikipedia.org/wiki/Bubble_sort">Bubble Sort</a></h3>
+
+<p>Bubble sort compares and swaps each pair of elements <code>a[k]</code> and <code>a[k+1]</code> in
+successive <code>n</code> passes over the array.</p>
+
+<p>The implementation I made was as follows:</p>
+
+<pre><code>function bubbleSort(arr,comp){
+  for(let i = arr.length-1; i &gt; 0; i--){       // The top j elements are sorted after j loops
+    for(let k = 0; k &lt; i; k++){                // Bubble from 0 to i
+      if(comp(arr[k],arr[k+1]) &gt; 0){           // If arr[k] &gt; arr[k+1]
+        [arr[k],arr[k+1]] = [arr[k+1],arr[k]]; //   Swap arr[k] and arr[k+1]
+      }
+    }
+  }
+}
+</code></pre>
+
+<p>The most striking thing about the graph is that the high points in the graph are
+mostly in a line from the top left to the bottom right. This should be expected
+because bubble sort will not be changing the order much because the random comparison
+is as about as likely to move an element up as down (in the middle of the array).
+What is more surprising is that it quite asymmetric; the distribution narrows
+from the top to the bottom and near the top corner it flares a little.</p>
+
+<p>The distribution narrowing is due to an optimization that allows bubble sort to
+not repeatedly compare the top elements. Because after the <code>i</code>th interation the top
+<code>i</code> elements will be in there final position, this implementation stops when it gets
+to that point. As a result, the elements at the top of the array have less of a
+chance to move than the bottom ones.</p>
+
+<p>The flairing that is most prominent in the <code>n=30</code> graph is mostly due to the bottom
+elements getting jumbled many times before they get to settle into their final positions
+so they have time to get close to randomly shuffled.</p>
+
+<h3 id="insertion-sort-https-en-wikipedia-org-wiki-insertion-sort"><a href="https://en.wikipedia.org/wiki/Insertion_sort">Insertion Sort</a></h3>
+
+<p>Insertion sort sorts by consecutively inserting (preserving sortedness) into <code>a[0:j]</code>
+(a sorted array by iteration <code>j</code>).</p>
+
+<p>The implementation I made was as follows:</p>
+
+<pre><code>function insertionSort(arr,comp){
+  // Build a sorted array 1 element at a time.
+  for(let i = 1; i &lt; arr.length; i++){
+    // Insert into the sorted array arr[0:i]
+    for(let k = i; k &gt; 0; k--){
+      if(comp(arr[k-1],arr[k]) &gt; 0){          // If arr[k-1] &gt; arr[k]
+        [arr[k],arr[k-1]] = [arr[k-1],arr[k]];//   Swap arr[k-1] and arr[k]
+      }else{
+        // arr[0:i+1] is sorted and is ready for the next interation
+        break;
+      }
+    }
+  }
+}
+</code></pre>
+
+<p>Insertion Sort has an incredibly simple graph. Most elements stay close to where
+they were initially with a nearly constant deviation. This is because each element
+compares with the one just below it and stays in place <sup>2</sup>&frasl;<sub>3</sub> of the time. So each
+element has a exponetially decaying by <code>1/3^d</code> (where <code>d</code> is distance from starting
+position for most elements, the edges are slightly more complicated). My display
+system is not accurate enough to see when <code>d &gt; ~5</code>; so we can only see a slight
+change is distribution at the first and last elements.</p>
+
+<p>A good execersise to check your understanding is to see if you can calculate the
+probability of the first element staying in place is.</p>
+
+<h3 id="selection-sort-https-en-wikipedia-org-wiki-selection-sort"><a href="https://en.wikipedia.org/wiki/Selection_sort">Selection Sort</a></h3>
+
+<p>Selection sorts selects the largest element (by <a href="https://en.wikipedia.org/wiki/Linear_search">linear search</a>)
+and swaps it with the <code>n-i</code> position for <code>n</code> iterations.</p>
+
+<p>The implementation I made was as follows:</p>
+
+<pre><code>function selectionSort(arr,comp){
+  // Build a sorted array 1 element at a time.
+  for(let i = 0; i &lt; arr.length; i++){
+    // Select the smallest element in arr[i:n-1]
+    let j = i;
+    for(let k = i+1; k &lt; arr.length; k++){
+      if(comp(arr[j],arr[k]) &gt; 0){
+        j = k;
+      }
+    }
+    // And swap it with the bottom of arr[i]
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+}
+</code></pre>
+
+<p>Selection Sort is definitely the most interesting of these first three sorting algorithms.
+The first element almost always comes from the end of the array, because they are
+the last ones considered and thus have a <code>~1/3</code> chance of being picked each. Then for
+the 0th element is now at the end of the array and is the most likely pick. This
+continues down the line until the end of the array was more likely to be picked
+than to have this type of pattern hold.</p>
+
+<p>Therefore if we change  <code>if(comp(arr[j],arr[k]) &gt; 0){</code> to <code>if(comp(arr[j],arr[k]) &gt;= 0){</code>,
+then the <code>~1/3</code> should change to <code>~2/3</code> and the behaviour at the end should narrow.</p>
+
+<p>The exact cutoff point for the switch between the two patterns is a little more
+complicated to derive and will be left out for the sake of brevity.</p>
+
+<h2 id="complex-efficient-sorts">Complex / Efficient Sorts</h2>
+
+<p>Now that we have gotten a taste for what sorting algorithms look like we can move
+onto the more advanced sorts: Heap Sort, Merge Sort and Quick Sort. Here is where
+we can start to expect to see some similarities to the implementations of Array.sort</p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Heap</td>
+<td><img src="images/heap-10.png" alt="heap-10" /></td>
+<td><img src="images/heap-30.png" alt="heap-30" /></td>
+<td><img src="images/heap-50.png" alt="heap-50" /></td>
+<td><img src="images/heap-100.png" alt="heap-100" /></td>
+<td><img src="images/heap-300.png" alt="heap-300" /></td>
+</tr>
+
+<tr>
+<td>Merge</td>
+<td><img src="images/merge-10.png" alt="merge-10" /></td>
+<td><img src="images/merge-30.png" alt="merge-30" /></td>
+<td><img src="images/merge-50.png" alt="merge-50" /></td>
+<td><img src="images/merge-100.png" alt="merge-100" /></td>
+<td><img src="images/merge-300.png" alt="merge-300" /></td>
+</tr>
+
+<tr>
+<td>Quick</td>
+<td><img src="images/quick-10.png" alt="quick-10" /></td>
+<td><img src="images/quick-30.png" alt="quick-30" /></td>
+<td><img src="images/quick-50.png" alt="quick-50" /></td>
+<td><img src="images/quick-100.png" alt="quick-100" /></td>
+<td><img src="images/quick-300.png" alt="quick-300" /></td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="composition-of-independent-sub-parts">Composition of independent sub-parts</h3>
+
+<p>In order to deaply understand these more complex algorithms, we are going to separate
+them into independent parts. Steps are considered independent if the output from
+the comparator used in one does not affect the other.</p>
+
+<p>For example, bubbleSort is fully separable, each iteration of the two outside loops
+does not depend on the comparator. It could be equivilantly be written out as a
+bunch of independent ifs.</p>
+
+<pre><code>function bubbleSort(arr,comp){
+  for(let i = arr.length-1; i &gt; 0; i--){       // The top j elements are sorted after j loops
+    for(let k = 0; k &lt; i; k++){                // Bubble from 0 to i
+      if(comp(arr[k],arr[k+1]) &gt; 0){           // If arr[k] &gt; arr[k+1]
+        [arr[k],arr[k+1]] = [arr[k+1],arr[k]]; //   Swap arr[k] and arr[k+1]
+      }
+    }
+  }
+}
+</code></pre>
+
+<p>Alternatively, the inner loop of selection sort is not separable. <code>j</code> depends on
+the result of a comparison and therefore is inseparable.</p>
+
+<pre><code>function selectionSort(arr,comp){
+  // Build a sorted array 1 element at a time.
+  for(let i = 0; i &lt; arr.length; i++){
+    // Select the smallest element in arr[i:n-1]
+    let j = i;
+    for(let k = i+1; k &lt; arr.length; k++){
+      if(comp(arr[j],arr[k]) &gt; 0){
+        j = k;
+      }
+    }
+    // And swap it with the bottom of arr[i]
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+}
+</code></pre>
+
+<p>One important thing to note here is that our separation is only valid because
+we are using a completely random comparator. With a normal comparator, the comparisons
+would be able to pass data along by mutating the array. Our comparator doesn&rsquo;t care
+about the data in the array though, so it is valid to separate.</p>
+
+<p>If we can separate it into steps, then we can generate the histograms independently
+and then combine then back into the full histogram. We can generate this full histogram
+by computing where an element starting at <code>i</code> will end up. We can use the first histogram
+to figure out the distribution of where that element would end up. Then, for each
+location in that distribution, we could compute where the element would finally
+end up. The math associated with the above explanation is equivilant to a matrix
+multiplcation.</p>
+
+<p>As javascript does not have a matrix multiplication built in and I don&rsquo;t want to
+bring in a library. I implemented it as:</p>
+
+<pre><code>function compose(f,g){
+  var n = f.length;
+  var out = (new Array(n)).fill(0).map(()=&gt;new Array(n).fill(0));
+  for(var x = 0; x &lt; n; x++){
+    let h = f[x];
+    for(var y = 0; y &lt; n; y++){
+      let i = g[y];
+      for(var k = 0; k &lt; n;k++){ //rescale i by h[y] and add to out[x]
+        out[x][k] += h[y]*i[k];
+      }
+    }
+  }
+  return out;
+}
+</code></pre>
+
+<p>If you are not convinced that we can reconstruct the original graph, it will be
+demonstrated that it does indeed work in the next section.</p>
+
+<h3 id="heap-sort-https-en-wikipedia-org-wiki-heap-sort"><a href="https://en.wikipedia.org/wiki/Heap_sort">Heap Sort</a></h3>
+
+<p>Heap Sort manipulates the array into a <a href="https://en.wikipedia.org/wiki/Heap_(data_structure)">heap</a>
+(generally <a href="https://en.wikipedia.org/wiki/In-place_algorithm">in place</a> as a
+<a href="https://en.wikipedia.org/wiki/Binary_tree">binary tree</a>). Then the maximum element
+is taken out and moved to the end of the unsorted array and the heap is reorganized
+to be a heap again.</p>
+
+<p>The implementation I made was as follows:</p>
+
+<pre><code>function heapSort(arr,comp){
+  // Turn arr into a heap
+  heapify(arr,comp);
+  for(let i = arr.length-1; i &gt; 0; i--){
+    // The 0th element of a heap is the largest so move it to the top.
+    [arr[0],arr[i]] = [arr[i],arr[0]];
+    // The 0th element is no longer the largest; restore the heap property
+    siftDown(arr,comp,0);
+  }
+}
+
+// Convert the array into a binary heap
+function heapify(arr,comp){
+  // arr[n/2-1:n-1] already satisfies the heap property because they are the leaves.
+  for(let i = Math.floor((arr.length-2)/2); i &gt;= 0; i--){
+    // Restore the heap property for i
+    siftDown(arr, comp, i);
+  }
+  // Now that the heap property is satisfied for all i from 0 to n-1, the array is a heap
+}
+
+// Make sure the root of the heap satifies the heap property,
+function siftDown(arr,comp,root){
+  // Stop if you reach a leave node
+  while(2*root+1 &lt; arr.length){
+    let child = 2*root+1;
+    let tmp = root;
+    
+    // If its child is greater than it, plan to switch them
+    if(comp(arr[child],arr[tmp])&gt;0){
+      tmp = child;
+    }
+    // If the second child is the greatest, plan to switch it
+    if(child+1 &lt; arr.length &amp;&amp; comp(arr[child+1],arr[tmp]) &gt; 0){
+      tmp = child + 1;
+    }
+    
+    if(tmp == root){
+      // If the root is the biggest, you are done.
+      return;
+    }else{
+      // If a child is greater than the root, swap them and repeat with the index of the child
+      [arr[root],arr[tmp]] = [arr[tmp],arr[root]];
+      root = tmp;
+    }
+  }
+}
+</code></pre>
+
+<p>This is certainly the most complex graph we have seen so far and it is much harder
+to analyse as a result.</p>
+
+<p>One way we can get a better understanding of it is by separating it into the <code>heapify</code>
+part and the for loop part (we could also separate the loop further).</p>
+
+<table>
+<thead>
+<tr>
+<th>Heapify</th>
+<th>Loop</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><img src="images/heapify-300.png" alt="Heapify" /></td>
+<td><img src="images/heap-loop-300.png" alt="Heap Loop" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>A quick sanity check to make sure our composition works shows taht the composition graph is statistically
+indistinguishable from the normal Heap Sort graph (they are actually different due to random sampling).</p>
+
+<table>
+<thead>
+<tr>
+<th>Compose(Heapify,Loop)</th>
+<th>Heap Sort</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><img src="images/composed-heap-300.png" alt="Composed Heap Sort" /></td>
+<td><img src="images/heap-300.png" alt="Heap Sort" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>From this it is quite clear that <code>heapify</code> is the cause of the multiple lines and
+the loop causes the crosshatching pattern. Notice that each line has a line that
+has twice its slope and half its slope. If we changed, the binary heap to a ternary
+heap or some higher <a href="https://en.wikipedia.org/wiki/D-ary_heap">d-ary heap</a>. I would
+expect the slopes to correlate because they come from swapping parents with children.</p>
+
+<table>
+<thead>
+<tr>
+<th>Binary</th>
+<th>Ternary</th>
+<th>4-ary</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><img src="images/heap-50.png" alt="Heap Sort" /></td>
+<td><img src="images/ternary-heap-50.png" alt="Ternary Heap Sort" /></td>
+<td><img src="images/4ary-heap-50.png" alt="4ary Heap Sort" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>And it does.</p>
+
+<p>The loop is a little harder to come to a good understanding of. The pattern on the
+left is from moving the first most element to the end of the array in each iteration.
+This causes <code>arr[0]</code> to always end up in <code>arr[n-1]</code>; subsequent iterations are not
+that clear cut though because <code>siftDown</code> is called.  There are still a few lines
+like the ones in heapify, but they are overshadowed by the pattern on the top of
+the main line which leads to the crosshatching pattern in the heap sort. <sup class="footnote-ref" id="fnref:3"><a rel="footnote" href="#fn:3">3</a></sup></p>
+
+<p>Looking at heap sort as a whole with this new understanding, may emphasize and explain
+the pattern in the bottom left. The exact reason the lines and the crosshatching
+patterns arise should also be much clearer.</p>
+
+<h3 id="merge-sort-https-en-wikipedia-org-wiki-merge-sort"><a href="https://en.wikipedia.org/wiki/Merge_sort">Merge Sort</a></h3>
+
+<p>Merge sort merges (sorted) subarrays until it has merged the entire array.</p>
+
+<p>There are two main ways of implementing merge sort: bottom-up and top-down. Originally
+I had implemented it top-down (because its slightly easier that way), but implemented
+it bottom-up to use the compose analysis on it (it is easier to separate analysis
+with loops rather than recursion) and because it is slightly more efficient (the
+browsers were more likely to implement it this way).</p>
+
+<p>My bottom-up implementation I made was as follows:</p>
+
+<pre><code>function mergeSort(arr,comp){
+  // Create some tempporary storage
+  // Merging is not effecient to do in-place, so we need another array to merge into
+  var a1 = arr;
+  var a2 = new Array(arr.length);
+  
+  // Merge all non-overlapping subarrays of width w for doubling w until w &gt; n
+  for(let w = 1; w &lt; arr.length; w *= 2){
+    for(let lo = 0; lo &lt; arr.length; lo += 2*w){
+      // If hi &gt; n, just copy a1[lo:n-1] to a2[lo:n-1]
+      let hi = lo+w;
+      if (hi &gt;= arr.length) {
+          copy(a2, a1, lo, arr.length-1);
+          break;
+      }
+      // Merge a1[lo:hi-1] and a1[hi:max(hi+w,n-1)] into a2[lo:max(hi+w,n-1)]
+      var top = Math.min(lo+2*w,arr.length);
+      merge(a2,a1,lo,hi,top-1,comp);
+    }
+    // Swap which array we are copying from
+    [a1,a2] = [a2,a1];
+  }
+  // If we the sorted data is in the copy, move it back
+  if(a1 !== arr){
+    copy(arr,a1,0,arr.length-1);
+  }
+}
+
+function merge(a1,a2,lo,hi,top,comp){
+  var j = hi;
+  for(let i = lo; i &lt;= top; i++){
+    if(lo &gt;= hi){                 // if the first subarray is empty
+      a1[i] = a2[j];
+      j++;
+    }else if(j &gt; top){            // if the second subarray is empty
+      a1[i] = a2[lo];
+      lo++;
+    }else{
+      if(comp(a2[lo],a2[j])&gt;0){   // otherwise compare and move the smaller one
+        a1[i] = a2[j];
+        j++;
+      }else{
+        a1[i] = a2[lo];
+        lo++;
+      }
+    }
+  }
+}
+
+function copy(a1,a2,lo,hi){
+  for(let i = lo; i &lt;= hi; i++){
+    a1[i] = a2[i];
+  }
+}
+</code></pre>
+
+<p>Like with heapsort separating the merge sort into discrete steps may give us greater
+insight into the workings of the algorithm. Lets just expand <code>for(var w = 1; w &lt; arr.length; w *= 2){</code>
+and make a graph for each <code>w</code>. (This essentially graphing merge with the right parameters)</p>
+
+<p>Note: not all <code>w</code>s are shown for sake of space.</p>
+
+<table>
+<thead>
+<tr>
+<th>w</th>
+<th>1</th>
+<th>4</th>
+<th>32</th>
+<th>128</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>mergeStep(w)</td>
+<td><img src="images/merge-step-1.png" alt="merge-step-1" /></td>
+<td><img src="images/merge-step-4.png" alt="merge-step-4" /></td>
+<td><img src="images/merge-step-32.png" alt="merge-step-32" /></td>
+<td><img src="images/merge-step-128.png" alt="merge-step-128" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>These should make sense; each loop is just merging subarrays of length <code>w</code> into
+subarrays of length <code>2w</code>. And each merge looks like the two streaks.</p>
+
+<p>To better understand the merge pattern though, lets look only at the <code>w=128</code> graph.
+<code>arr[0]</code> and <code>arr[128]</code> are both likely to end up around <code>arr[0]</code> which accounts
+for the start of the two streaks. Each element afterwards becomes more uncertain
+and more likely to end up towards the end of the array. The vertical ending to
+the first streak is just the boundary between the first subarray and the second.
+and the diagonal cutoff for the second is because elements in the second array
+cannot be merged behind their initial position because the rest of the second array
+needs to fit there.</p>
+
+<p>It is not quite clear how these build the final so lets compose some them in reverse
+order to try to better understand (Doing it in forward order will just give us things
+that look like merge sort).</p>
+
+<p>IE rather than composing like <code>((AB)C)D</code> and looking at each intermediate step. We
+can do <code>A(B(CD))</code> and look at each itermediate step. This is a valid method because
+matrix multiplication is <a href="https://en.wikipedia.org/wiki/Associative_property">associative</a>.</p>
+
+<table>
+<thead>
+<tr>
+<th>w</th>
+<th>(64-256)</th>
+<th>(16-256)</th>
+<th>(4-256)</th>
+<th>(1-256)</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>steps in the range composed</td>
+<td><img src="images/merge-steps-64-256.png" alt="merge-steps-64-256" /></td>
+<td><img src="images/merge-steps-16-256.png" alt="merge-steps-16-256" /></td>
+<td><img src="images/merge-steps-4-256.png" alt="merge-steps-4-256" /></td>
+<td><img src="images/merge-steps-1-256.png" alt="merge-steps-1-256" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>And that explains why the pattern in merge sort arises just from the graph of merge.</p>
+
+<h3 id="quick-sort-https-en-wikipedia-org-wiki-quick-sort"><a href="https://en.wikipedia.org/wiki/Quick_sort">Quick Sort</a></h3>
+
+<p>Quick sort picks a pivot value (this is the largest difference between different
+quicksort implementations),partitions the array into two sections: elements greater
+than the pivot and elements less than pivot, and then quicksorts those subarrays.</p>
+
+<p>The implementation I made was as follows:</p>
+
+<pre><code>function quickSort(arr,comp){
+  return quickSortRecurse(arr,comp,0,arr.length-1);
+}
+
+// Quicksort on a slice of the array
+function quickSortRecurse(arr,comp,lo,hi){
+  // If lo &gt;= hi, its sorted
+  if(lo &lt; hi){
+    // Partition arr into (arr[lo:pivot-1] are &lt; arr[pivot]) &amp; (arr[pivot+1:hi] are &gt;= arr[pivot])
+    let pivot = partition(arr,comp,lo,hi);
+    // Sort the two sub arrays
+    quickSortRecurse(arr,comp,lo,pivot-1);
+    quickSortRecurse(arr,comp,pivot+1,hi);
+  }
+}
+
+function partition(arr,comp,lo,hi){
+  // Pick the pivot value to be the top element;
+  var pivot = arr[hi];
+  
+  var k = lo;
+  for(let i = lo; i &lt; hi;i++){
+    // If the element is less than pivot, move it into arr[lo:k]
+    if(comp(arr[i],pivot) &lt; 0){
+      [arr[i],arr[k]] = [arr[k],arr[i]];
+      k++;
+    }
+  }
+  
+  // Move the pivot into its final place;
+  [arr[hi],arr[k]] = [arr[k],pivot];
+  
+  // Return the index of pivot
+  return k;
+}
+</code></pre>
+
+<p>Quick sort does a pretty good job of being hard to understand. We can&rsquo;t use composition
+easily because it is recursive (with dependence on the comparator) and is generally
+quite even (there is only one major easy patterns to identify).</p>
+
+<p>The right edge is where we selected the pivot from and is, as a result, different
+from the rest. Because of the way it was implemented, where the pivot ended up is
+where the first division happened. Looking at the graph, we can see it is most likely
+to be around <code>arr[n/3]</code> with a pretty smooth distribution to both sides.</p>
+
+<p>That pattern alone I believe is responsible for most of the pattern of the graph.
+In each recursive call, the location of the last index changes, but the pattern around
+it stays the same.</p>
+
+<p>A more complex attempt at composition could give a more rigorous and meaningful analysis,
+but that would be a somewhat involved process and may not make it any clearer. So for
+the sake of time, it will be omitted.</p>
+
+<h2 id="figuring-out-the-implementations-of-array-sort">Figuring out the implementations of Array.Sort</h2>
+
+<p>Now that we have a decent understanding of most of the major sorting algorithms,
+and how to interpret these graphs we can now begin to try to reverse engineer how
+Array.sort was implemented.</p>
+
+<p>We will be looking at both the <a href="https://en.wikipedia.org/wiki/V8_(JavaScript_engine)">V8</a>(Chrome)
+and <a href="https://en.wikipedia.org/wiki/SpiderMonkey">SpiderMonkey</a>(Firefox) implementations
+of Array.sort <sup class="footnote-ref" id="fnref:4"><a rel="footnote" href="#fn:4">4</a></sup> <sup class="footnote-ref" id="fnref:5"><a rel="footnote" href="#fn:5">5</a></sup></p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Chrome</td>
+<td><img src="images/Array.sort-10.png" alt="Array.sort-10" /></td>
+<td><img src="images/Array.sort-30.png" alt="Array.sort-30" /></td>
+<td><img src="images/Array.sort-50.png" alt="Array.sort-50" /></td>
+<td><img src="images/Array.sort-100.png" alt="Array.sort-100" /></td>
+<td><img src="images/Array.sort-300.png" alt="Array.sort-300" /></td>
+</tr>
+
+<tr>
+<td>Firefox</td>
+<td><img src="images/FArray.sort-10.png" alt="FArray.sort-10" /></td>
+<td><img src="images/FArray.sort-30.png" alt="FArray.sort-30" /></td>
+<td><img src="images/FArray.sort-50.png" alt="FArray.sort-50" /></td>
+<td><img src="images/FArray.sort-100.png" alt="FArray.sort-100" /></td>
+<td><img src="images/FArray.sort-300.png" alt="FArray.sort-300" /></td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="firefox-s-implementation">FireFox&rsquo;s Implementation</h3>
+
+<p><em>Note</em>: More recent versions of Firefox have a slighlty different sorting algorithm.</p>
+
+<p>Just a quick reminder/reference, this is what the graphs for Firefox looked like.</p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Firefox</td>
+<td><img src="images/FArray.sort-10.png" alt="FArray.sort-10" /></td>
+<td><img src="images/FArray.sort-30.png" alt="FArray.sort-30" /></td>
+<td><img src="images/FArray.sort-50.png" alt="FArray.sort-50" /></td>
+<td><img src="images/FArray.sort-100.png" alt="FArray.sort-100" /></td>
+<td><img src="images/FArray.sort-300.png" alt="FArray.sort-300" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>Out of the three main effecient sorting algorithms, which is most similar to these
+graphs? Heap and quicksort are clearly very different. However, merge sort has a
+sort of swept pattern that looks kind of like it; the intermediate steps for merge
+also look similar so it seems like a good bet.</p>
+
+<p><code>n=10</code> shows an interesting pattern along the diagonal. It looks very similar to
+insertion sort, but is restricted to 3x3 areas of the graph.</p>
+
+<p>More formally, it looks like it was generated by something like:</p>
+
+<pre><code>// Runs Insertion sort on 3 wide sub arrays along the entire array
+function boundedInsertionSort(arr,comp){
+  for(let i = 0; i &lt; arr.length; i+=3){
+    insertCustom(arr,comp,i,1,Math.min(arr.length,i+3));
+  }
+}
+
+// Insertion sort with custom increment, initial position and end position
+// Used for shell sort, merge-insert sort and quick-insert sort
+function insertCustom(arr,comp,start,increment,end){
+  for(let i = start+increment; i &lt; end; i+=increment){
+    for(let k = i; k-increment &gt;= start; k -= increment){
+      if(comp(arr[k-increment],arr[k]) &gt; 0){
+        let temp = arr[k];
+        arr[k]   = arr[k-increment];
+        arr[k-increment] = temp;
+      }else{
+        break;
+      }
+    }
+  }
+}
+</code></pre>
+
+<p>Which looks like</p>
+
+<p><img src="images/bounded-insertion-10.png" alt="Bounded Insertion" /></p>
+
+<p>Why would Firefox be using insertion sort like this? Merge Sort can sort just fine
+on its own.</p>
+
+<p>While I haven&rsquo;t talked to any contributors about this, I am quite confident it is
+because merge sort is inefficient for small lists so insertion sort is taking care
+of the small ones then merge sort can take over when the subarrays are greater than
+3.</p>
+
+<p>Adding this pre-sorting to a bottom-up mergesort (top down with insertion sort applied
+as it is would be super messy) would look like:</p>
+
+<pre><code>// Mostly the same, but with a bounded Insertion sort first and a slight change to the outer for loop
+function mergeInsertSort(arr,comp){
+  // Run insertion sort first
+  boundedInsertionSort(arr,comp);
+  
+  var a1 = arr;
+  var a2 = new Array(arr.length)
+  
+  // w starts at 3 now because it each every 3 element subarray is already sorted.
+  for(let w = 3; w &lt; arr.length; w *= 2){
+    for(let lo = 0; lo &lt; arr.length; lo += 2*w){
+      var hi = lo + w;
+      if (hi &gt;= arr.length) {
+          copy(a2, a1, lo, arr.length-1);
+          break;
+      }
+      var top = Math.min(lo + 2*w,arr.length);
+      merge(a2, a1, lo, hi, top-1, comp);
+    }
+    var s = a1;
+    a1 = a2;
+    a2 = s;
+  }
+  if(a1 !== arr){
+    copy(arr,a1,0,arr.length-1);
+  }
+}
+</code></pre>
+
+<p>Which looks like:</p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Merge Insert</td>
+<td><img src="images/merge-insert-10.png" alt="merge-insert-10" /></td>
+<td><img src="images/merge-insert-30.png" alt="merge-insert-30" /></td>
+<td><img src="images/merge-insert-50.png" alt="merge-insert-50" /></td>
+<td><img src="images/merge-insert-100.png" alt="merge-insert-100" /></td>
+<td><img src="images/merge-insert-300.png" alt="merge-insert-300" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>Which is not right, it is still really close to the default merge sort. We need
+something to make merge sort more chunky and let the insertion sort shine through
+more.</p>
+
+<h4 id="some-cheating-looking-at-the-source-code">Some Cheating (Looking at the source code)</h4>
+
+<p>I can&rsquo;t infer from the graphs what the difference in our implementations is. So
+I am going to cheat a little and look at the source code of spider monkey.</p>
+
+<p>Surprisingly, it is quite easy to find the sorting code by looking through the
+<a href="https://github.com/mozilla/gecko-dev/">gecko repo</a> on github. Just look at
+<a href="https://github.com/mozilla/gecko-dev/blob/6e8e617ff4f01ed3213637847cd1e01825e62afd/js/src/jsarray.cpp">jsarray.cpp</a>
+(The obvious place to look for Array methods) and see that <a href="https://github.com/mozilla/gecko-dev/blob/6e8e617ff4f01ed3213637847cd1e01825e62afd/js/src/jsarray.cpp#L1899">MergeSort</a>
+is called, but not defined in the file so it must be in one of the headers. <a href="https://github.com/mozilla/gecko-dev/blob/6e8e617ff4f01ed3213637847cd1e01825e62afd/js/src/jsarray.cpp#L28">ds/Sort.h</a>
+seems quite promising. In there we find the <a href="https://github.com/mozilla/gecko-dev/blob/6e8e617ff4f01ed3213637847cd1e01825e62afd/js/src/ds/Sort.h#L82">definition of MergeSort</a>
+and some <a href="https://github.com/mozilla/gecko-dev/blob/6e8e617ff4f01ed3213637847cd1e01825e62afd/js/src/ds/Sort.h#L18">helper methods</a>.</p>
+
+<p>And looking through, our implementation is strikingly similar to Spidemonkey&rsquo;s (this <em>may</em> not be purely coincidental).
+It may be hard to see how the graphs are so different, when the implementations
+are so similar.</p>
+
+<p>The one missing thing is <a href="https://github.com/mozilla/gecko-dev/blob/6e8e617ff4f01ed3213637847cd1e01825e62afd/js/src/ds/Sort.h#L41">this check</a><sup class="footnote-ref" id="fnref:6"><a rel="footnote" href="#fn:6">6</a></sup>:</p>
+
+<pre><code>if (!lessOrEqual) {
+        /* Runs are not already sorted, merge them. */
+</code></pre>
+
+<p>Implementing that check in merge would lead to:</p>
+
+<pre><code>// Merge with a small optimization
+function mergeOpt(a1,a2,lo,hi,top,comp){
+  var j = hi;
+  // Check to see if they are already merged
+  if(comp(a2[lo],a2[j])&gt;0){
+    for(let i = lo; i &lt;= top; i++){
+      if(lo &gt;= hi){
+        a1[i] = a2[j];
+        j++;
+      }else if(j &gt; top){
+        a1[i] = a2[lo];
+        lo++;
+      }else{
+        if(comp(a2[lo],a2[j])&gt;0){
+          a1[i] = a2[j];
+          j++;
+        }else{
+          a1[i] = a2[lo];
+          lo++;
+        }
+      }
+    }
+  }else{
+    // If they are already merged, just copy them
+    copy(a1,a2,lo,top);
+  }
+}
+</code></pre>
+
+<p>And when we run the Merge Insert Sort with this extra check,</p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Merge Insert with Extra Check</td>
+<td><img src="images/merge-insert-opt-10.png" alt="merge-insert-opt-10" /></td>
+<td><img src="images/merge-insert-opt-30.png" alt="merge-insert-opt-30" /></td>
+<td><img src="images/merge-insert-opt-50.png" alt="merge-insert-opt-50" /></td>
+<td><img src="images/merge-insert-opt-100.png" alt="merge-insert-opt-100" /></td>
+<td><img src="images/merge-insert-opt-300.png" alt="merge-insert-opt-300" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>Which is nearly identical. Success!</p>
+
+<p>And we only had to cheat a little. We were able to guess most of the implementation
+through this type of analysis, but it wasn&rsquo;t immediately clear how to implement
+the last major difference. We could at least confirm if our implementation was nearly
+identical though.</p>
+
+<h3 id="chrome-s-implementation">Chrome&rsquo;s implementation</h3>
+
+<p>Reminder of the Graphs</p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Chrome</td>
+<td><img src="images/Array.sort-10.png" alt="Array.sort-10" /></td>
+<td><img src="images/Array.sort-30.png" alt="Array.sort-30" /></td>
+<td><img src="images/Array.sort-50.png" alt="Array.sort-50" /></td>
+<td><img src="images/Array.sort-100.png" alt="Array.sort-100" /></td>
+<td><img src="images/Array.sort-300.png" alt="Array.sort-300" /></td>
+</tr>
+</tbody>
+</table>
+
+<h4 id="insertion-sort-is-involved">Insertion sort is involved</h4>
+
+<p>For <code>n=10</code> we can see that it is very similar if not identical to insertion Sort.</p>
+
+<p>A quick test can show a comparison of Array.sort and insertion Sort around 10.</p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>5</th>
+<th>10</th>
+<th>12</th>
+<th>15</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Chrome</td>
+<td><img src="images/Array.sort-5.png" alt="Array.sort-5" /></td>
+<td><img src="images/Array.sort-10.png" alt="Array.sort-10" /></td>
+<td><img src="images/Array.sort-12.png" alt="Array.sort-12" /></td>
+<td><img src="images/Array.sort-15.png" alt="Array.sort-15" /></td>
+</tr>
+
+<tr>
+<td>Insertion</td>
+<td><img src="images/insertion-5.png" alt="insertion-5" /></td>
+<td><img src="images/insertion-10.png" alt="insertion-10" /></td>
+<td><img src="images/insertion-12.png" alt="insertion-12" /></td>
+<td><img src="images/insertion-15.png" alt="insertion-15" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>As we can see, for <code>n=5</code> and <code>n=10</code>, Array.sort looks indistinguishable from insertion
+sort. But for <code>n=12</code> and <code>n=15</code>, the patterns diverge. We can conclude from this that,
+at least for first iteration (my guess is that its true for every iteration), if
+<code>n &lt;= 10</code>, insertion sort is being used instead of Quick Sort.</p>
+
+<h4 id="quicksort-is-the-main-sort">Quicksort is the main sort.</h4>
+
+<p>It is not very clear what main algorithm Chrome is using. It doesn&rsquo;t look very much
+like any of the three. To me, it looks most like quicksort, but we would like to
+be more sure.</p>
+
+<p>We can at least somewhat confirm this by showing that Chrome&rsquo;s Array.sort is <a href="https://en.wikipedia.org/wiki/Sorting_algorithm#Stability">instable</a>.</p>
+
+<p>We can&rsquo;t prove stability without testing all possible inputs (Proving stability
+of a black box algorithm is not possible, but if it was we would have used this
+to confirm Merge sort for firefox), but we can show instability. The following test
+for stability fails for chrome (because insertion sort is stable and is used for n &lt; 10, we had to have an array longer than 10 elements).</p>
+
+<pre><code>var a = [[5,1],[5,2],[4,3],[4,4],[3,5],[3,6],[2,7],[2,8],[1,9],[1,10],[0,11],[0,12]];
+a.sort((a,b)=&gt;a[0]-b[0]);
+
+// a is now [0,12],[0,11],[1,10],[1,9],[2,7],[2,8],[3,6],[3,5],[4,4],[4,3],[5,2],[5,1]
+</code></pre>
+
+<p><code>[1,10]</code> and <code>[1,9]</code> swapped places and thus we know that it is not stable so, of
+efficient, pure algorithms, only heap sort and quick sort are instable. As it should
+be clear Array.sort is not using heapsort for the top level sorting algorithm, quick
+sort must be the major algorithm in the implementation.</p>
+
+<h4 id="partitioning-algorithm">Partitioning algorithm</h4>
+
+<p>In the graphs of Array.sort, the first, middle and last elements all have a vertical line associated with them in the graph. So we can guess that the pivot value is chosen somehow from one of those three elements.</p>
+
+<p>IE, the partition function is probably something like</p>
+
+<pre><code>function partition(arr,comp,lo,hi){
+  // f is some unknown function
+  var s = f(arr,lo,(lo+hi)/2), hi);
+  
+  var pivot = arr[s]; //move the pivot to the top
+  arr[s] = arr[hi];
+  arr[hi] = s;
+
+  var k = lo+1;
+  for(let i = lo+1; i &lt; hi-1;i++){
+    if(comp(arr[i],pivot) &lt; 0){
+      [arr[i],arr[k]] = [arr[k],arr[i]];
+      k++;
+    }
+  }
+  
+  // Put the pivot back in the middle
+  [arr[hi-1],arr[k]] = [arr[k],pivot];
+  return k;
+}
+</code></pre>
+
+<p>My best guess for what the function f would be is picking the middle value. EG</p>
+
+<pre><code>function f(arr,lo,mid,hi){
+  // select the middle element when sorted by value of the array
+  return [lo,mid,hi].sort((a,b)=&gt;arr[a]-arr[b])[1];
+}
+</code></pre>
+
+<h4 id="best-guess-for-chrome-s-implementation">Best guess for Chrome&rsquo;s implementation</h4>
+
+<p>Combining all the hints we have extracted thus far, we can get that chrome&rsquo;s
+implementation is something like:</p>
+
+<pre><code>function quickInsertSort(arr,comp){
+  return quickInsertSortRecurse(arr,comp,0,arr.length-1);
+}
+
+function quickInsertSortRecurse(arr,comp,lo,hi){
+  if(lo+10 &lt; hi){
+    // Same as before, but with a new partition
+    let pivot = partition2(arr,comp,lo,hi);
+    quickInsertSortRecurse(arr,comp,lo,pivot-1);
+    quickInsertSortRecurse(arr,comp,pivot+1,hi);
+  }else{
+    // If the range is &lt;= 10, use insertion sort
+    insertCustom(arr,comp,lo,1,hi+1);
+  }
+}
+
+function partition2(arr,comp,lo,hi){
+  var pivot = setupPivot(arr,comp,lo,Math.floor((lo+hi)/2), hi);
+  
+  //Pretty much the same as before, but with slightly different bounds
+  var k = lo+1;
+  for(let i = lo+1; i &lt; hi-1;i++){
+    if(comp(arr[i],pivot) &lt; 0){
+      [arr[i],arr[k]] = [arr[k],arr[i]];
+      k++;
+    }
+  }
+  
+  // Put the pivot back in the middle
+  [arr[hi-1],arr[k]] = [arr[k],pivot];
+  return k;
+}
+
+function setupPivot(arr,comp,lo,mid,hi){
+  // Use the top bottom and middle as potential pivots
+  var a = arr[lo];
+  var b = arr[mid];
+  var c = arr[hi];
+  
+  // Sort a, b and c
+  if(comp(a,b) &gt; 0){
+    [a,b]=[b,a]
+  }
+  if(comp(a,c) &gt;= 0){
+    [a,b,c]=[c,a,b];
+  }else{
+    if (comp(b, c) &gt; 0) {
+      [b,c]=[c,b];
+    }
+  }
+  // Put the top and bottom values back
+  arr[lo] = a;
+  arr[hi] = c;
+  
+  // And use the median as the pivot
+  [arr[mid],arr[hi-1]] = [arr[hi-1],b];
+  
+  return b;
+}
+</code></pre>
+
+<p>This doesn&rsquo;t quite follow the things I laid above for a few reasons:</p>
+
+<ol>
+<li>I don&rsquo;t want to be using <code>[].sort</code> in my implementation so I inlined that</li>
+<li>For simplicity, I changed <code>f</code> to put the pivot on top and just return the pivot</li>
+<li>Optimized a little by placing the non-pivot values on the right side of the pivot and did not include them in the main partition.</li>
+</ol>
+
+<p>This algorithm looks like:</p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Quick Insert + new Partition</td>
+<td><img src="images/quick-insert-10.png" alt="quick-insert-10" /></td>
+<td><img src="images/quick-insert-30.png" alt="quick-insert-30" /></td>
+<td><img src="images/quick-insert-50.png" alt="quick-insert-50" /></td>
+<td><img src="images/quick-insert-100.png" alt="quick-insert-100" /></td>
+<td><img src="images/quick-insert-300.png" alt="quick-insert-300" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>Ok, that is definitely much closer than a pure quicksort. For <code>n=10</code> we get the
+insertion Sort as expected and we now do have those vertical lines at the bottom,
+midpoint and top. However, we are still missing something, the big red spot in the
+middle of the Array.sort graph is completely absent in this one.</p>
+
+<p>Though, we can at least deduce one more thing about Chrome&rsquo;s implementation. Note
+the double bar in our algorithm on the right vs the double bar on the left in Chrome&rsquo;s
+implementation.</p>
+
+<table>
+<thead>
+<tr>
+<th>Quick Insert Sort</th>
+<th>Array.sort</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><img src="images/quick-insert-30.png" alt="quick-insert-30" /></td>
+<td><img src="images/Array.sort-30.png" alt="Array.sort-30" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>So we know that chrome is partitioning putting the pivot on the bottom rather than
+the top. Changing that doesn&rsquo;t make a significant difference though.</p>
+
+<p>Like with Firefox&rsquo;s Implementation, it looks like its not trivial to guess how to
+make our current guess better.</p>
+
+<h4 id="some-more-cheating">Some more Cheating</h4>
+
+<p>Like with FireFox&rsquo;s source, <a href="https://github.com/v8/v8/">v8&rsquo;s source</a> is also on
+Github. Then looking in the most obvious file <a href="https://github.com/v8/v8/blob/35b6aa38497fdd1ea08af7d4042528c645826b06/src/js/array.js">array.js</a>,
+we find <a href="https://github.com/v8/v8/blob/35b6aa38497fdd1ea08af7d4042528c645826b06/src/js/array.js#L707">InnerArraySort</a>
+which implements Array.sort. There are a bunch of extra checks in that function,
+but we only really care about up till <a href="https://github.com/v8/v8/blob/35b6aa38497fdd1ea08af7d4042528c645826b06/src/js/array.js#L841">line 841</a>.
+Disregarding <a href="https://github.com/v8/v8/blob/35b6aa38497fdd1ea08af7d4042528c645826b06/src/js/array.js#L39">GetThirdIndex</a>
+and some checks, we have effectively identical code up to <a href="https://github.com/v8/v8/blob/35b6aa38497fdd1ea08af7d4042528c645826b06/src/js/array.js#L805">line 805</a>.</p>
+
+<p>Note that:</p>
+
+<pre><code>while (true) {
+  // Insertion sort is faster for short arrays.
+  if (to - from &lt;= 10) {
+    InsertionSort(a, from, to);
+    return;
+  }
+  //...
+  //...
+  if (to - high_start &lt; low_end - from) {
+    QuickSort(a, high_start, to);
+    to = low_end;
+  } else {
+    QuickSort(a, from, low_end);
+    from = high_start;
+  }
+}
+</code></pre>
+
+<p>is essentially just inlining the <a href="https://en.wikipedia.org/wiki/Tail_call">tail call</a> of</p>
+
+<pre><code>function quickInsertSortRecurse(arr,comp,lo,hi){
+  if(lo+10 &lt; hi){
+    let pivot = partition3(arr,comp,lo,hi);
+    quickInsertSortRecurse(arr,comp,lo,pivot-1);
+    quickInsertSortRecurse(arr,comp,pivot+1,hi);
+  }else{
+    insertCustom(arr,comp,lo,1,hi+1);
+  }
+}
+</code></pre>
+
+<p>The main difference is in the partitioning step (which is the meat of Quick Sort).
+Chrome is using a more complex partition (which is somewhat hard to understand due
+to optimizations) which is partitions the array into three pieces (less than pivot,
+equal to pivot, and greater than pivot); ours simply partitions into two (less than,
+and greater than or equal to).</p>
+
+<p>Reworking our partition (and recursive method) to account like the following should
+give us a very similar graph to Chrome&rsquo;s implementation.</p>
+
+<pre><code>function quickInsertSort2(arr,comp){
+  return quickInsertSort2Recurse(arr,comp,0,arr.length-1);
+}
+
+function quickInsertSort2Recurse(arr,comp,lo,hi){
+  if(lo+10 &lt; hi){
+    let [a,b] = partition3(arr,comp,lo,hi);
+    quickInsertSort2Recurse(arr,comp,lo,a-1);
+    quickInsertSort2Recurse(arr,comp,b+1,hi);
+  }else{
+    insertCustom(arr,comp,lo,1,hi+1);
+  }
+}
+
+function partition3(arr,comp,lo,hi){
+  var pivot = setupPivot(arr,comp,lo,Math.floor((lo+hi)/2), hi);
+  
+  var eqlo = lo+1, eqhi = hi-1;
+  for(let i = lo+2; i &lt;= eqhi;i++){
+    let c = comp(arr[i],pivot);
+    if(c &lt; 0){
+      // Move arr[i] below the equal range
+      [arr[eqlo],arr[i]] = [arr[i],arr[eqlo]];
+      eqlo++;
+    }else if(c &gt; 0){
+      // Move arr[i] above the equal range
+      [arr[eqhi],arr[i]] = [arr[i],arr[eqhi]];
+      eqhi--;
+      // The value at arr[i] has not yet been processed so stall the loop
+      i--;
+    } // If c === 0, do nothing, it is in the right place
+  }
+  // State of sub array:
+  //  [lo:eqlo)   is less than pivot
+  //  [eqlo:eqhi] is equal to pivot
+  //  (eqhi:hi)   is greater than pivot
+  return [eqlo,eqhi];
+}
+</code></pre>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Quick Insert + new new Partition</td>
+<td><img src="images/quick-insert2-10.png" alt="quick-insert2-10" /></td>
+<td><img src="images/quick-insert2-30.png" alt="quick-insert2-30" /></td>
+<td><img src="images/quick-insert2-50.png" alt="quick-insert2-50" /></td>
+<td><img src="images/quick-insert2-100.png" alt="quick-insert2-100" /></td>
+<td><img src="images/quick-insert2-300.png" alt="quick-insert2-300" /></td>
+</tr>
+</tbody>
+</table>
+
+<p>And it does. Success.</p>
+
+<p>One question that this raises though is how much does insertion sort play a role in defining the shape of the graph</p>
+
+<p>Interesting aside:</p>
+
+<p>Changing the cutoff for using insertion sort can perhaps help us understand why this patterns occurs.</p>
+
+<table>
+<thead>
+<tr>
+<th>20</th>
+<th>30</th>
+<th>40</th>
+<th>50</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><img src="images/quick-insert-20-100.png" alt="quick-insert-20-100" /></td>
+<td><img src="images/quick-insert-30-100.png" alt="quick-insert-30-100" /></td>
+<td><img src="images/quick-insert-40-100.png" alt="quick-insert-40-100" /></td>
+<td><img src="images/quick-insert-50-100.png" alt="quick-insert-50-100" /></td>
+</tr>
+</tbody>
+</table>
+
+<h2 id="final-words">Final Words</h2>
+
+<p>By using a random comparator we were able to see into the black box of Array.sort
+implementation and do a decent job of reverse engineering. This technique has many
+parallels to <a href="https://en.wikipedia.org/wiki/Fuzz_testing">Fuzz Testing</a>; the main
+difference is that we are not trying to make the software error and instead are
+seeing what the undefined behaviour looks like. By comparing to known algorithms,
+we can get most of the way to understanding what is happening inside the black box.
+Getting to an exact match of the implementation may be hard to do, but if achieved
+through some separate method. This method can validate much of the behaviour of the
+reproduced algorithm.</p>
+
+<p>On a slightly different note, this method also allows us to &ldquo;see&rdquo; logical equivalences.
+Two methods that may have very similar code, but a slight difference such as an extra
+if, might generate very different graphs.</p>
+
+<p>Hints for applying this type of technique to other types of problems:</p>
+
+<ul>
+<li>Find undefined behaviour that would differentiate algorithms
+
+<ul>
+<li>All sorting algorithms give the same final result (disregarding stability) if the comparator fulfills a few conditions (reflexive, antisymmetric, transitive)</li>
+<li>Randomness abuses all three and thus the output is undefined</li>
+</ul></li>
+<li>Find a way to visualize or aggregate the data</li>
+<li>Implement several algorithms and test them to understand patterns</li>
+</ul>
+
+<h3 id="next-steps">Next Steps</h3>
+
+<p>Some possible ways to build off this:</p>
+
+<ul>
+<li>Try using a different random comparator eg make it change the probabilities of 1 -1 and 0</li>
+<li>Try testing other sort implementations such as Opera&rsquo;s and Edge/IE&rsquo;s
+
+<ul>
+<li>A Pull Request for this would be welcomed</li>
+</ul></li>
+<li>Try having the comparator only sometimes be random
+<br /></li>
+</ul>
+
+<h2 id="appendix-more-hybrid-sorts">Appendix: More Hybrid Sorts</h2>
+
+<p>Here are a few more sorts I implemented, but didn&rsquo;t fit well into the flow of the
+general article (made it too long). However they interesting (and pretty) so I will
+include them here. Analysis will be foregone for sake of space and my time.</p>
+
+<p>As this is on Github, if you feel like adding an interesting hybrid sort here, feel
+free to make a Pull request to add it.</p>
+
+<table>
+<thead>
+<tr>
+<th>n</th>
+<th>10</th>
+<th>30</th>
+<th>50</th>
+<th>100</th>
+<th>300</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Shell Sort</td>
+<td><img src="images/shell-10.png" alt="shell-10" /></td>
+<td><img src="images/shell-30.png" alt="shell-30" /></td>
+<td><img src="images/shell-50.png" alt="shell-50" /></td>
+<td><img src="images/shell-100.png" alt="shell-100" /></td>
+<td><img src="images/shell-300.png" alt="shell-300" /></td>
+</tr>
+
+<tr>
+<td>Comb Sort</td>
+<td><img src="images/comb-10.png" alt="comb-10" /></td>
+<td><img src="images/comb-30.png" alt="comb-30" /></td>
+<td><img src="images/comb-50.png" alt="comb-50" /></td>
+<td><img src="images/comb-100.png" alt="comb-100" /></td>
+<td><img src="images/comb-300.png" alt="comb-300" /></td>
+</tr>
+
+<tr>
+<td>Cocktail Sort</td>
+<td><img src="images/cocktail-10.png" alt="cocktail-10" /></td>
+<td><img src="images/cocktail-30.png" alt="cocktail-30" /></td>
+<td><img src="images/cocktail-50.png" alt="cocktail-50" /></td>
+<td><img src="images/cocktail-100.png" alt="cocktail-100" /></td>
+<td><img src="images/cocktail-300.png" alt="cocktail-300" /></td>
+</tr>
+</tbody>
+</table>
+<div class="footnotes">
+
+<hr />
+
+<ol>
+<li id="fn:1">A correct way to do this is with <a href="https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle">Fisher-Yates Shuffle</a>
+ <a class="footnote-return" href="#fnref:1"><sup>[return]</sup></a></li>
+<li id="fn:2">Alternatively it can be thought of as a <a href="https://en.wikipedia.org/wiki/Stochastic_matrix">stochastic matrix</a>
+ <a class="footnote-return" href="#fnref:2"><sup>[return]</sup></a></li>
+<li id="fn:3">Further composition analysis could be done on the internals on the loop
+ <a class="footnote-return" href="#fnref:3"><sup>[return]</sup></a></li>
+<li id="fn:4">For these tests Chrome is Version 61; Firefox is Version 45.
+ <a class="footnote-return" href="#fnref:4"><sup>[return]</sup></a></li>
+<li id="fn:5">For non-built in methods assume Chrome was used (becuase automatic downloading doesn&rsquo;t work in Firefox), but it should not change any results as the Javascript sorts should perform identically.
+ <a class="footnote-return" href="#fnref:5"><sup>[return]</sup></a></li>
+<li id="fn:6">Note this check simply allows it to be slightly faster than the naive implementation, it does not affect correctness (assuming that the comparator is transitive ie ((a &gt; b), (b &gt; c) -&gt; (a &gt; c))) or Big O runtime.
+ <a class="footnote-return" href="#fnref:6"><sup>[return]</sup></a></li>
+</ol>
+</div>
+
+</div>
+
+    
+<footer class='entry-footer-container'>
+  <div class='entry-footer'>
+  
+  </div>
+</footer>
+
+
+  </article>
+  
+  
+</main>
+
+    <footer id='footer' class='footer-container'>
+      <div class='footer'>
+        <div class='social-menu-container'>
+  <nav aria-label='Social Menu'>
+    <ul class='social-menu'></ul>
+  </nav>
+</div>
+        <div class='copyright'>
+  <p>
+  </p>
+</div>
+
+      </div>
+    </footer>
+
+  </div><script src='../../assets/js/main.f29c93b9.js'></script><script data-no-instant>document.write('<script src="/livereload.js?port=1313&mindelay=10"></' + 'script>')</script></body>
+
+</html>
+

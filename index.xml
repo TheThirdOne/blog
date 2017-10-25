@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>A blog`</title>
+    <link>http://localhost:1313/</link>
+    <description>Recent content on A blog`</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 25 Oct 2017 11:45:23 -0700</lastBuildDate>
+    
+	<atom:link href="http://localhost:1313/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Analysis of Sorting Algorithms using Random Comparators</title>
+      <link>http://localhost:1313/posts/random-sorting/</link>
+      <pubDate>Wed, 25 Oct 2017 11:45:23 -0700</pubDate>
+      
+      <guid>http://localhost:1313/posts/random-sorting/</guid>
+      <description>Analysis of algorithms is generally restricted to complexity analysis. Which ignores all factors of an algorithm which don&amp;rsquo;t affect the asymptotic behaviour. Many of those factors can be important for understanding the behaviour in general. This post will demonstrate a possibility for better analyzing the finer details of algorithms.
+In reverse engineering, the implementation details may be critical to understanding or reproducing how some algorithm works. Timing analysis and fuzz testing are effective at reconstruction an algorithm if only a black box was available, but fail to provide any new insight into a known algorithm.</description>
+    </item>
+    
+  </channel>
+</rss>
