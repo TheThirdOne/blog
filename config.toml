@@ -1,0 +1,5 @@
+baseURL = "https://thethirdone.github.io/"
+languageCode = "en-us"
+title = "A blog`"
+theme = "minimo"
+relativeurls = true
